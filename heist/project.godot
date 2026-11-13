@@ -1,0 +1,53 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+
+config/name="الخزنة"
+config/description="لعبة سطو مسلّح من منظور الشخص الأول: خطة، خزنة، وحصار."
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.5", "GL Compatibility")
+config/quit_on_go_back=false
+boot_splash/bg_color=Color(0.03, 0.05, 0.07, 1)
+boot_splash/show_image=false
+
+[autoload]
+
+Game="*res://scripts/game.gd"
+Audio="*res://scripts/audio.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=4
+
+[gui]
+
+theme/custom_font="res://fonts/Cairo.ttf"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=false
+
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="player"
+3d_physics/layer_3="enemy"
+3d_physics/layer_4="friendly"
+3d_physics/layer_5="player_block"
+3d_physics/layer_6="gates"
+
+[physics]
+
+common/physics_ticks_per_second=60
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+anti_aliasing/quality/msaa_3d=1
