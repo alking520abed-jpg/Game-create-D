@@ -118,6 +118,15 @@ func _process(delta: float) -> void:
 				if _greet_cd < 0.0:
 					say(["انتبه!", "على مهلك!", "يا ساتر!"][_rng.randi() % 3])
 					_greet_cd = 6.0
+		elif Game.combat != null and flee_t <= 0.0 and Game.combat.nearest_enemy(global_position, 13.0) != null:
+			var en = Game.combat.nearest_enemy(global_position, 13.0)
+			var away: Vector3 = global_position - en.global_position
+			away.y = 0.0
+			flee_dir = away.normalized() if away.length() > 0.1 else Vector3.RIGHT
+			flee_t = 1.2
+			if _greet_cd < 0.0:
+				say(["النجدة!", "اهربوا!", "يا حارس!", "ساعدونا!"][_rng.randi() % 4])
+				_greet_cd = 7.0
 		elif dist < 3.2 and Game.car == null and _greet_cd < 0.0:
 			_greet_cd = 14.0
 			rig.wave = 1.6

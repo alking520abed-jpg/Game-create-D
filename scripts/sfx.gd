@@ -11,7 +11,7 @@ var _thread: Thread
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	for i in 6:
+	for i in 10:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
 		pool.append(p)
@@ -26,6 +26,19 @@ func _ready() -> void:
 	sounds["door"] = _noise(0.16, 0.6)
 	sounds["jump"] = _sweep(260.0, 520.0, 0.14, 0.35)
 	sounds["meow"] = _meow()
+	sounds["morph"] = _sweep(180.0, 1300.0, 0.38, 0.45)
+	sounds["swing"] = _sweep(700.0, 180.0, 0.12, 0.3)
+	sounds["hit"] = _noise(0.14, 0.9)
+	sounds["boom"] = _noise(0.75, 1.0)
+	sounds["crash"] = _noise(0.28, 0.8)
+	sounds["shot"] = _noise(0.07, 0.6)
+	sounds["fire"] = _sweep(520.0, 110.0, 0.3, 0.45)
+	sounds["laser"] = _sweep(1900.0, 480.0, 0.16, 0.3)
+	sounds["zap"] = _tone([[1760.0, 0.0, 0.06], [1245.0, 0.05, 0.06], [1976.0, 0.1, 0.08], [988.0, 0.16, 0.2]], 0.4, 9.0, true)
+	sounds["vanish"] = _sweep(950.0, 160.0, 0.45, 0.35)
+	sounds["hurt"] = _tone([[196.0, 0.0, 0.16]], 0.55, 10.0, true)
+	sounds["down"] = _tone([[294.0, 0.0, 0.14], [196.0, 0.11, 0.3]], 0.45, 6.0, true)
+	sounds["alert"] = _tone([[880.0, 0.0, 0.11], [660.0, 0.13, 0.11], [880.0, 0.26, 0.22]], 0.4, 5.0)
 	engine = AudioStreamPlayer.new()
 	engine.stream = _engine()
 	engine.volume_db = -60.0

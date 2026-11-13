@@ -2,7 +2,7 @@ class_name Car
 extends CharacterBody3D
 ## سيارة: مجسم مبني بالكود + قيادة أركيد + ذكاء اصطناعي للمرور.
 
-enum Mode { PARKED, AI, PLAYER }
+enum Mode { PARKED, AI, PLAYER, WRECK }
 
 const SPECS := {
 	"sedan": {"name": "سيدان", "len": 4.5, "wid": 1.85, "clear": 0.3, "belt": 0.9, "top": 1.42, "hood": 1.25, "trunk": 0.95, "inf": 0.65, "inr": 0.5, "topw": 0.78, "wr": 0.34, "max": 38.0, "accel": 11.0, "grip": 7.0, "offroad": 0.55},
@@ -35,6 +35,9 @@ var _tag: Label3D
 var _light: SpotLight3D
 var _dust: CPUParticles3D
 var _horn_cd := 0.0
+var hp := 100.0
+var _wreck_t := 0.0
+var _fire: CPUParticles3D
 
 # الذكاء الاصطناعي
 var ai_a := Vector2i.ZERO
@@ -301,11 +304,68 @@ func _fx(on: bool) -> void:
 			_dust.emitting = false
 
 
+## ضرر من قدرات البطل أو الانفجارات
+func damage(dmg: float, impulse := Vector3.ZERO) -> void:
+	if mode == Mode.WRECK or locked():
+		return
+	impulse.y = 0.0
+	velocity += impulse
+	set_physics_process(true)
+	if mode == Mode.AI and impulse.length() > 3.0:
+		set_mode(Mode.PARKED)
+		if Game.main and not Game.main.abandoned.has(self):
+			Game.main.abandoned.append(self)
+	hp -= dmg
+	if hp <= 0.0:
+		_explode()
+
+
+func _explode() -> void:
+	if Game.car == self and Game.main:
+		Game.main.force_exit_car()
+		Game.player.hurt(25.0, global_position)
+	mode = Mode.WRECK
+	_wreck_t = 22.0
+	_fx(false)
+	collision_mask = 1 | 2
+	var burnt := StandardMaterial3D.new()
+	burnt.albedo_color = Color(0.07, 0.065, 0.06)
+	burnt.roughness = 1.0
+	for c in body.get_children():
+		if c is MeshInstance3D:
+			c.material_override = burnt
+	for w in wheel_meshes:
+		w.material_override = burnt
+	body.rotation.z = _rng.randf_range(-0.12, 0.12)
+	_fire = Combat.make_particles(Color(1.0, 0.5, 0.12), 20, 0.9, 1.5)
+	_fire.position = Vector3(0, 1.1, 0)
+	_fire.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	_fire.emission_box_extents = Vector3(0.7, 0.2, 1.4)
+	_fire.gravity = Vector3(0, 4.0, 0)
+	_fire.initial_velocity_max = 1.0
+	_fire.local_coords = false
+	add_child(_fire)
+	if Game.main:
+		Game.main.abandoned.erase(self)
+	set_physics_process(true)
+	if Game.combat:
+		Game.combat.explode(global_position + Vector3(0, 1.0, 0), 6.5, 45.0, 0)
+
+
 func _physics_process(delta: float) -> void:
 	if Game.state == Game.State.MENU and mode != Mode.AI:
 		return
 	_horn_cd -= delta
 	match mode:
+		Mode.WRECK:
+			_wreck_t -= delta
+			if velocity.length() > 0.05:
+				_move(0.0, 0.0, true, delta)
+			if _wreck_t < 6.0 and _fire:
+				_fire.emitting = false
+			if _wreck_t <= 0.0:
+				Game.cars.erase(self)
+				queue_free()
 		Mode.PARKED:
 			if abs(speed) < 0.05 and abs(lateral) < 0.05:
 				velocity = Vector3.ZERO

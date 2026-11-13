@@ -1,225 +1,295 @@
 class_name CharacterRig
 extends Node3D
-## شخصية مبنية بالكود مع أنيميشن إجرائي (مشي، جري، قفز، تلويح).
+## شخصية من مجسم جاهز (FBX) مع هيكل عظمي وأنيميشن حقيقي.
+## المجسمات من Quaternius برخصة CC0 — لا توجد أي شخصية مبنية بالكود.
 
-const SKINS := ["f1c9a5", "e0ac7e", "c68f5e", "a8703f", "8a5a33"]
-const SHIRTS := ["d94f3d", "2f7fc1", "3aa76d", "e2b23a", "7d4fb8", "e8e8e8", "2b2b33", "e57fa0", "1f9e9e"]
-const PANTS := ["2c3e5a", "3b3b40", "5a4632", "1f2a44", "6b6b70"]
+const DIR := "res://models/"
 
-var style := 0          # 0 شاب، 1 ثوب وشماغ، 2 عباية وحجاب، 3 بنت/فستان
-var phase := 0.0
-var wave := 0.0
-var l_arm: Node3D
-var r_arm: Node3D
-var l_leg: Node3D
-var r_leg: Node3D
-var torso: Node3D
-var head: Node3D
-var _t := 0.0
+## لكل مجسم: الملف، الطول بالمتر، خامة (إن وجدت)، أسماء الأنيميشن
+const HUMAN := {"idle": "Idle", "walk": "Walk", "run": "Walk", "attack": "Punch", "special": "Shoot_OneHanded", "shoot": "Shoot_OneHanded", "hit": "RecieveHit", "death": "Defeat", "wave": "Victory", "pick": "PickUp"}
+const MECH := {"idle": "Idle", "walk": "Walk", "run": "Run", "attack": "Punch", "attack2": "Kick", "special": "Jump", "shoot": "Shoot", "slash": "SwordSlash", "hit": "HitRecieve_1", "death": "Death", "wave": "Hello", "jump": "Jump"}
+const MODELS := {
+	"saif": {"file": "Casual_Male", "h": 1.8, "a": HUMAN},
+	"layla": {"file": "Casual_Female", "h": 1.72, "a": HUMAN},
+	"doctor": {"file": "Doctor_Male_Old", "h": 1.78, "a": HUMAN},
+	"civ1": {"file": "Casual2_Male", "h": 1.8, "a": HUMAN},
+	"civ2": {"file": "Casual2_Female", "h": 1.7, "a": HUMAN},
+	"civ3": {"file": "Casual3_Male", "h": 1.82, "a": HUMAN},
+	"civ4": {"file": "Casual3_Female", "h": 1.7, "a": HUMAN},
+	"civ5": {"file": "Worker_Male", "h": 1.8, "a": HUMAN},
+	"civ6": {"file": "OldClassy_Male", "h": 1.76, "a": HUMAN},
+	"civ7": {"file": "OldClassy_Female", "h": 1.68, "a": HUMAN},
+	"civ8": {"file": "Suit_Female", "h": 1.72, "a": HUMAN},
+	"civ9": {"file": "Casual_Female", "h": 1.7, "a": HUMAN},
+	"thug": {"file": "Suit_Male", "h": 1.85, "a": HUMAN},
+	"soldier": {"file": "Soldier_Male", "h": 1.85, "a": HUMAN},
+	"mutant": {"file": "Zombie_Male", "h": 1.95, "a": HUMAN},
+	"stan": {"file": "Stan", "h": 3.3, "tex": "Stan_Texture", "a": MECH},
+	"leela": {"file": "Leela", "h": 2.7, "tex": "Leela_Texture", "a": MECH},
+	"george": {"file": "George", "h": 4.6, "tex": "George_Texture", "a": MECH},
+	"mike": {"file": "Mike", "h": 6.0, "tex": "Mike_Texture", "a": MECH},
+	"robot": {"file": "Robot", "h": 2.2, "a": {"idle": "Robot_Idle", "walk": "Robot_Walking", "run": "Robot_Running", "attack": "Robot_Punch", "special": "Robot_Jump", "shoot": "Robot_Punch", "hit": "Robot_No", "death": "Robot_Death", "wave": "Robot_Wave", "jump": "Robot_Jump"}},
+	"skeleton": {"file": "Skeleton", "h": 2.05, "a": {"idle": "Skeleton_Idle", "walk": "Skeleton_Running", "run": "Skeleton_Running", "attack": "Skeleton_Attack", "special": "Skeleton_Spawn", "hit": "Skeleton_Idle", "death": "Skeleton_Death"}},
+	"dragon": {"file": "Dragon", "h": 2.5, "lift": 0.7, "a": {"idle": "Dragon_Flying", "walk": "Dragon_Flying", "run": "Dragon_Flying", "attack": "Dragon_Attack", "special": "Dragon_Attack2", "hit": "Dragon_Hit", "death": "Dragon_Death"}},
+	"bat": {"file": "Bat", "h": 1.5, "lift": 0.2, "a": {"idle": "Bat_Flying", "walk": "Bat_Flying", "run": "Bat_Flying", "attack": "Bat_Attack", "special": "Bat_Attack2", "hit": "Bat_Hit", "death": "Bat_Death"}},
+}
+const CIVS := ["civ1", "civ2", "civ3", "civ4", "civ5", "civ6", "civ7", "civ8", "civ9", "layla", "saif"]
+const LOOPS := ["idle", "walk", "run"]
 
-static var _mesh_cache := {}
-static var _mat_cache := {}
+static var _cache := {}      # id -> {scene, scale, off}
+static var _mats := {}
 
-
-static func _mat(c: Color, rough := 0.85) -> StandardMaterial3D:
-	var k := c.to_html() + str(rough)
-	if not _mat_cache.has(k):
-		var m := StandardMaterial3D.new()
-		m.albedo_color = c
-		m.roughness = rough
-		_mat_cache[k] = m
-	return _mat_cache[k]
-
-
-static func _capsule(r: float, h: float) -> Mesh:
-	var k := "c%.3f_%.3f" % [r, h]
-	if not _mesh_cache.has(k):
-		var m := CapsuleMesh.new()
-		m.radius = r
-		m.height = h
-		m.radial_segments = 8
-		m.rings = 3
-		_mesh_cache[k] = m
-	return _mesh_cache[k]
-
-
-static func _sphere(r: float) -> Mesh:
-	var k := "s%.3f" % r
-	if not _mesh_cache.has(k):
-		var m := SphereMesh.new()
-		m.radius = r
-		m.height = r * 2
-		m.radial_segments = 10
-		m.rings = 6
-		_mesh_cache[k] = m
-	return _mesh_cache[k]
-
-
-static func _box(s: Vector3) -> Mesh:
-	var k := "b" + str(s)
-	if not _mesh_cache.has(k):
-		var m := BoxMesh.new()
-		m.size = s
-		_mesh_cache[k] = m
-	return _mesh_cache[k]
+var model_id := ""
+var model: Node3D
+var ap: AnimationPlayer
+var height := 1.8
+var wave := 0.0: set = _set_wave
+var busy := 0.0             # وقت متبقٍ لحركة لمرة واحدة
+var dead := false
+var _cur := ""
+var _names := {}
+var _meshes: Array[MeshInstance3D] = []
+var _ghost := false
+var _flash := 0.0
+var _tint_mat: StandardMaterial3D
 
 
-func _part(parent: Node3D, mesh: Mesh, col: Color, pos: Vector3, scl := Vector3.ONE) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.material_override = _mat(col)
-	mi.position = pos
-	mi.scale = scl
-	mi.visibility_range_end = 130.0
-	parent.add_child(mi)
-	return mi
+static func _collect(n: Node, out: Array) -> void:
+	if n is MeshInstance3D:
+		out.append(n)
+	for c in n.get_children():
+		_collect(c, out)
 
 
-func build(p_style: int, rng: RandomNumberGenerator = null, hero := false) -> void:
-	style = p_style
+static func _find_ap(n: Node) -> AnimationPlayer:
+	if n is AnimationPlayer:
+		return n
+	for c in n.get_children():
+		var r := _find_ap(c)
+		if r != null:
+			return r
+	return null
+
+
+static func _rel_xf(n: Node3D, root: Node) -> Transform3D:
+	var t := Transform3D.IDENTITY
+	var x: Node = n
+	while x != null and x != root:
+		if x is Node3D:
+			t = (x as Node3D).transform * t
+		x = x.get_parent()
+	return t
+
+
+## holder: عقدة داخل الشجرة لقياس المجسم بدقة (القطع المربوطة بالعظام تأخذ مكانها الصحيح فقط داخل الشجرة)
+static func _info(id: String, holder: Node = null) -> Dictionary:
+	if _cache.has(id):
+		return _cache[id]
+	var d: Dictionary = MODELS[id]
+	var scene: PackedScene = load(DIR + d["file"] + ".fbx")
+	var tmp: Node3D = scene.instantiate()
+	if holder != null and holder.is_inside_tree():
+		holder.add_child(tmp)
+	var ms: Array = []
+	_collect(tmp, ms)
+	var box := AABB()
+	var first := true
+	for m in ms:
+		var xf: Transform3D = _rel_xf(m, tmp)
+		if tmp.is_inside_tree():
+			xf = tmp.global_transform.affine_inverse() * (m as MeshInstance3D).global_transform
+		var a: AABB = xf * (m as MeshInstance3D).get_aabb()
+		box = a if first else box.merge(a)
+		first = false
+	if tmp.get_parent() != null:
+		tmp.get_parent().remove_child(tmp)
+	tmp.free()
+	var s: float = d["h"] / max(box.size.y, 0.001)
+	var info := {"scene": scene, "scale": s, "off": -box.position.y * s + d.get("lift", 0.0)}
+	_cache[id] = info
+	return info
+
+
+static func preload_all(ids: Array, holder: Node = null) -> void:
+	for id in ids:
+		_info(id, holder)
+
+
+## توافق مع الكود القديم: اختيار شخصية مدنية عشوائية أو البطل
+func build(_style: int, rng: RandomNumberGenerator = null, hero := false) -> void:
+	if hero:
+		set_model("saif")
+		return
 	if rng == null:
 		rng = RandomNumberGenerator.new()
 		rng.randomize()
-	var skin := Color(SKINS[rng.randi() % SKINS.size()])
-	var shirt := Color(SHIRTS[rng.randi() % SHIRTS.size()])
-	var pants := Color(PANTS[rng.randi() % PANTS.size()])
-	var hair := Color(0.1, 0.08, 0.07) if rng.randf() < 0.8 else Color(0.35, 0.22, 0.12)
-	var shoes := Color(0.15, 0.15, 0.17)
-	if hero:
-		skin = Color("e0ac7e")
-		shirt = Color("e8452c")
-		pants = Color("26334d")
-		shoes = Color(0.95, 0.95, 0.95)
-	if style == 1:
-		shirt = Color(0.96, 0.96, 0.94)
-		pants = shirt
-	elif style == 2:
-		shirt = [Color(0.1, 0.1, 0.12), Color(0.2, 0.15, 0.3), Color(0.1, 0.25, 0.3), Color(0.35, 0.12, 0.18)][rng.randi() % 4]
-		pants = shirt
-	elif style == 3:
-		pants = shirt.darkened(0.1)
-
-	torso = Node3D.new()
-	torso.position.y = 0.92
-	add_child(torso)
-	_part(torso, _capsule(0.21, 0.62), shirt, Vector3(0, 0.3, 0), Vector3(1.05, 1, 0.72))
-	if hero:
-		# سترة بلون مختلف + حقيبة ظهر
-		_part(torso, _box(Vector3(0.44, 0.08, 0.3)), Color(0.95, 0.95, 0.95), Vector3(0, 0.25, 0))
-		_part(torso, _box(Vector3(0.3, 0.36, 0.14)), Color(0.15, 0.35, 0.6), Vector3(0, 0.33, 0.2))
-	# الرأس
-	head = Node3D.new()
-	head.position.y = 0.72
-	torso.add_child(head)
-	_part(head, _sphere(0.17), skin, Vector3(0, 0.08, 0), Vector3(1, 1.08, 1))
-	_part(head, _capsule(0.07, 0.18), skin, Vector3(0, -0.1, 0))
-	var eye := Color(0.08, 0.06, 0.05)
-	_part(head, _sphere(0.025), eye, Vector3(-0.065, 0.1, -0.15))
-	_part(head, _sphere(0.025), eye, Vector3(0.065, 0.1, -0.15))
-	match style:
-		0:
-			_part(head, _sphere(0.18), hair, Vector3(0, 0.14, 0.03), Vector3(1.02, 0.75, 1.02))
-			if hero or rng.randf() < 0.3:
-				var cap := Color("1f6fd0") if hero else shirt.darkened(0.2)
-				_part(head, _sphere(0.185), cap, Vector3(0, 0.17, 0.02), Vector3(1.03, 0.62, 1.03))
-				_part(head, _box(Vector3(0.24, 0.025, 0.16)), cap, Vector3(0, 0.17, -0.2))
-		1:
-			# شماغ وعقال
-			var red := rng.randf() < 0.6
-			var gh := Color(0.85, 0.2, 0.2) if red else Color(0.97, 0.97, 0.95)
-			_part(head, _sphere(0.19), gh, Vector3(0, 0.13, 0.03), Vector3(1.05, 0.85, 1.08))
-			_part(head, _box(Vector3(0.36, 0.3, 0.06)), gh, Vector3(0, -0.06, 0.16))
-			_part(head, _box(Vector3(0.05, 0.3, 0.2)), gh, Vector3(-0.18, -0.06, 0.06))
-			_part(head, _box(Vector3(0.05, 0.3, 0.2)), gh, Vector3(0.18, -0.06, 0.06))
-			var ag := CylinderMesh.new()
-			ag.top_radius = 0.175
-			ag.bottom_radius = 0.175
-			ag.height = 0.035
-			ag.radial_segments = 10
-			_part(head, ag, Color(0.05, 0.05, 0.05), Vector3(0, 0.21, 0.02))
-		2:
-			var hj: Color = [shirt, Color(0.9, 0.85, 0.8), Color(0.75, 0.55, 0.6), Color(0.5, 0.6, 0.75)][rng.randi() % 4]
-			_part(head, _sphere(0.2), hj, Vector3(0, 0.1, 0.035), Vector3(1.05, 1.1, 1.05))
-			_part(head, _capsule(0.13, 0.3), hj, Vector3(0, -0.12, 0.02), Vector3(1.3, 1, 1))
-		3:
-			_part(head, _sphere(0.185), hair, Vector3(0, 0.13, 0.04), Vector3(1.05, 0.85, 1.05))
-			_part(head, _capsule(0.09, 0.4), hair, Vector3(0, -0.12, 0.14), Vector3(1.4, 1, 0.7))
-	# الأذرع
-	l_arm = _limb(torso, Vector3(-0.27, 0.56, 0), shirt, skin, 0.065, 0.58, style == 0 and not hero and rng.randf() < 0.6)
-	r_arm = _limb(torso, Vector3(0.27, 0.56, 0), shirt, skin, 0.065, 0.58, false)
-	# الأرجل
-	l_leg = _limb(self, Vector3(-0.11, 0.9, 0), pants, shoes, 0.085, 0.86, false, true)
-	r_leg = _limb(self, Vector3(0.11, 0.9, 0), pants, shoes, 0.085, 0.86, false, true)
-	if style == 1 or style == 2 or style == 3:
-		# ثوب / عباية / فستان
-		var cm := CylinderMesh.new()
-		cm.top_radius = 0.2
-		cm.bottom_radius = 0.3 if style != 3 else 0.36
-		cm.height = 0.82 if style != 3 else 0.55
-		cm.radial_segments = 10
-		var sk := _part(torso, cm, shirt if style != 3 else shirt, Vector3(0, -0.36 if style != 3 else -0.22, 0), Vector3(1, 1, 0.8))
-		sk.name = "skirt"
+	set_model(CIVS[rng.randi() % (CIVS.size() - 2)])
 
 
-func _limb(parent: Node3D, pos: Vector3, col: Color, end_col: Color, r: float, length: float, short_sleeve := false, is_leg := false) -> Node3D:
-	var pivot := Node3D.new()
-	pivot.position = pos
-	parent.add_child(pivot)
-	_part(pivot, _capsule(r, length), end_col if short_sleeve else col, Vector3(0, -length / 2 + r, 0))
-	if short_sleeve:
-		_part(pivot, _capsule(r * 1.15, length * 0.45), col, Vector3(0, -length * 0.16, 0))
-	if is_leg:
-		_part(pivot, _box(Vector3(0.14, 0.09, 0.27)), end_col, Vector3(0, -length + r * 0.6, -0.05))
-	else:
-		_part(pivot, _sphere(r * 1.05), end_col, Vector3(0, -length + r * 1.6, 0))
-	return pivot
-
-
-## speed: السرعة الأفقية (م/ث) — on_floor: هل هو على الأرض
-func animate(speed: float, delta: float, on_floor := true, sitting := false) -> void:
-	_t += delta
-	if sitting:
-		l_leg.rotation.x = 1.4
-		r_leg.rotation.x = 1.4
-		l_arm.rotation.x = 0.7
-		r_arm.rotation.x = 0.7
+func set_model(id: String) -> void:
+	if id == model_id:
 		return
-	var amp: float = clamp(speed / 3.0, 0.0, 1.0)
-	var run: float = clamp((speed - 3.5) / 3.0, 0.0, 1.0)
-	phase += delta * (5.0 + speed * 1.6) * (1.0 if speed > 0.15 else 0.0)
-	var s := sin(phase)
-	var leg_a: float = (0.55 + run * 0.4) * amp
-	var arm_a: float = (0.45 + run * 0.6) * amp
-	var ll := s * leg_a
-	var rl := -s * leg_a
-	var la := -s * arm_a
-	var ra := s * arm_a
-	var bob: float = abs(cos(phase)) * 0.05 * amp
-	var lean := run * 0.22
-	if not on_floor:
-		ll = 0.5
-		rl = -0.35
-		la = -2.4
-		ra = -2.4
-		bob = 0.0
-	elif speed < 0.15:
-		# تنفّس خفيف وهو واقف
-		bob = sin(_t * 2.0) * 0.012
-		la = sin(_t * 1.3) * 0.04
-		ra = -la
-	var k: float = min(1.0, delta * 14.0)
-	l_leg.rotation.x = lerp(l_leg.rotation.x, ll, k)
-	r_leg.rotation.x = lerp(r_leg.rotation.x, rl, k)
-	if wave > 0.0:
-		wave -= delta
-		ra = 0.0
-		r_arm.rotation.z = lerp(r_arm.rotation.z, 2.6 + sin(_t * 12.0) * 0.35, k)
+	if model != null:
+		model.queue_free()
+		remove_child(model)
+	model_id = id
+	var d: Dictionary = MODELS[id]
+	var info := _info(id, self)
+	height = d["h"]
+	model = (info["scene"] as PackedScene).instantiate()
+	add_child(model)
+	model.scale = Vector3.ONE * info["scale"]
+	model.position.y = info["off"]
+	model.rotation.y = PI   # المجسمات تواجه +Z واللعبة تتحرك نحو -Z
+	_meshes.clear()
+	var ms: Array = []
+	_collect(model, ms)
+	for m in ms:
+		var mi: MeshInstance3D = m
+		mi.extra_cull_margin = 4.0 / info["scale"]
+		mi.visibility_range_end = 170.0
+		_meshes.append(mi)
+		if d.has("tex"):
+			var k: String = d["tex"]
+			if not _mats.has(k):
+				var sm := StandardMaterial3D.new()
+				sm.albedo_texture = load(DIR + k + ".png")
+				sm.roughness = 0.7
+				sm.metallic = 0.25
+				_mats[k] = sm
+			for s in mi.mesh.get_surface_count():
+				mi.set_surface_override_material(s, _mats[k])
+	ap = _find_ap(model)
+	_names.clear()
+	_cur = ""
+	busy = 0.0
+	dead = false
+	if ap != null:
+		var list := ap.get_animation_list()
+		for key in d["a"]:
+			var want: String = d["a"][key]
+			for an in list:
+				if an == want or an.ends_with("|" + want):
+					_names[key] = an
+					if key in LOOPS:
+						ap.get_animation(an).loop_mode = Animation.LOOP_LINEAR
+					break
+	if _ghost:
+		_apply_ghost()
+	play("idle")
+
+
+func has_anim(key: String) -> bool:
+	return _names.has(key)
+
+
+func play(key: String, speed := 1.0, blend := 0.18) -> void:
+	if ap == null or not _names.has(key):
+		return
+	ap.play(_names[key], blend, speed)
+	_cur = key
+
+
+## حركة لمرة واحدة (ضربة، إصابة...). ترجع مدتها بالثواني.
+func action(key: String, speed := 1.0) -> float:
+	if ap == null or dead or not _names.has(key):
+		return 0.0
+	var n: String = _names[key]
+	ap.stop()
+	ap.play(n, 0.08, speed)
+	_cur = key
+	busy = ap.get_animation(n).length / speed
+	return busy
+
+
+func die() -> void:
+	if dead:
+		return
+	dead = true
+	busy = 9999.0
+	if ap != null and _names.has("death"):
+		ap.play(_names["death"], 0.1)
+		_cur = "death"
+
+
+func revive() -> void:
+	dead = false
+	busy = 0.0
+	play("idle")
+
+
+func _set_wave(v: float) -> void:
+	wave = v
+	if v > 0.0 and busy <= 0.0 and not dead:
+		action("wave", 1.3)
+
+
+## تحديث أنيميشن الحركة حسب السرعة (م/ث)
+func animate(hs: float, delta: float, _on_floor := true, run_at := 4.8, walk_ref := 1.6, run_ref := 6.5) -> void:
+	if _flash > 0.0:
+		_flash -= delta
+		if _flash <= 0.0:
+			_set_overlay(null)
+	if dead:
+		return
+	if busy > 0.0:
+		busy -= delta
+		return
+	if hs < 0.25:
+		play("idle")
+	elif hs < run_at:
+		play("walk", clamp(hs / walk_ref, 0.6, 2.2))
 	else:
-		r_arm.rotation.z = lerp(r_arm.rotation.z, 0.06 + run * 0.1, k)
-	l_arm.rotation.z = -0.06 - run * 0.1
-	l_arm.rotation.x = lerp(l_arm.rotation.x, la, k)
-	r_arm.rotation.x = lerp(r_arm.rotation.x, ra, k)
-	torso.position.y = 0.92 + bob
-	torso.rotation.x = lerp(torso.rotation.x, -lean, k)
-	torso.rotation.y = s * 0.12 * amp
-	head.rotation.y = -s * 0.08 * amp
+		play("run", clamp(hs / run_ref, 0.8, 2.6) * (1.7 if _names.get("run", "") == _names.get("walk", "-") else 1.0))
+
+
+# ---------------- مؤثرات على المجسم ----------------
+
+func _set_overlay(m: Material) -> void:
+	for mi in _meshes:
+		if is_instance_valid(mi):
+			mi.material_overlay = m
+
+
+static func _overlay(col: Color) -> StandardMaterial3D:
+	var k := "ov" + col.to_html()
+	if not _mats.has(k):
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.albedo_color = col
+		_mats[k] = m
+	return _mats[k]
+
+
+## وميض عند الإصابة
+func flash(col := Color(1, 1, 1, 0.75), t := 0.12) -> void:
+	_flash = t
+	_set_overlay(_overlay(col))
+
+
+## تلوين ثابت (تجميد مثلاً). null لإزالته.
+func tint(col) -> void:
+	_flash = 0.0
+	_set_overlay(null if col == null else _overlay(col))
+
+
+## هيئة شبحية شبه شفافة
+func ghost(on: bool) -> void:
+	_ghost = on
+	_apply_ghost()
+
+
+func _apply_ghost() -> void:
+	if not _mats.has("ghost"):
+		var m := StandardMaterial3D.new()
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.albedo_color = Color(0.55, 0.85, 1.0, 0.28)
+		m.emission_enabled = true
+		m.emission = Color(0.3, 0.6, 1.0)
+		m.emission_energy_multiplier = 0.6
+		m.cull_mode = BaseMaterial3D.CULL_BACK
+		_mats["ghost"] = m
+	for mi in _meshes:
+		if is_instance_valid(mi):
+			mi.material_override = _mats["ghost"] if _ghost else null

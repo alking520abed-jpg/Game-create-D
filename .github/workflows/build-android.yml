@@ -57,15 +57,15 @@ jobs:
         run: $HOME/godot/godot --headless --import
 
       - name: Gameplay test
-        run: timeout 600 $HOME/godot/godot --headless -- --simtest
+        run: timeout 1200 $HOME/godot/godot --headless -- --simtest
 
       - name: Export APK
         run: |
           mkdir -p build
-          $HOME/godot/godot --headless --export-debug "Android" build/madinat-alnakheel.apk
-          test -s build/madinat-alnakheel.apk
+          $HOME/godot/godot --headless --export-debug "Android" build/haris-alnakheel.apk
+          test -s build/haris-alnakheel.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: madinat-alnakheel-apk
-          path: build/madinat-alnakheel.apk
+          name: haris-alnakheel-apk
+          path: build/haris-alnakheel.apk

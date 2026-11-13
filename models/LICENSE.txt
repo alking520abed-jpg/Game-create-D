@@ -1,0 +1,6 @@
+All 3D character models and animations in this folder were created by Quaternius
+(https://quaternius.com) and are released under CC0 1.0 (public domain):
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Packs used: Ultimate Animated Character Pack, Animated Mech Pack,
+Animated Monster Pack, Animated Robot.

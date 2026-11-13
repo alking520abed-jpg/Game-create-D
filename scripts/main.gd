@@ -16,6 +16,8 @@ var abandoned: Array = []
 var _tick := 0.0
 var _edge_cd := 0.0
 var _rng := RandomNumberGenerator.new()
+var combat: Combat
+var story: Story
 
 
 func _ready() -> void:
@@ -24,6 +26,9 @@ func _ready() -> void:
 	Game.cars = []
 	Game.car = null
 	Game.state = Game.State.MENU
+	Game.hp = Game.MAX_HP
+	Game.energy = Game.MAX_ENERGY
+	CharacterRig.preload_all(CharacterRig.MODELS.keys(), self)
 	city = City.new()
 	add_child(city)
 	city.build()
@@ -33,6 +38,8 @@ func _ready() -> void:
 	cam = CameraRig.new()
 	add_child(cam)
 	Game.cam = cam
+	combat = Combat.new()
+	add_child(combat)
 	player = Player.new()
 	add_child(player)
 	player.global_position = city.start_pos
@@ -42,6 +49,8 @@ func _ready() -> void:
 	add_child(missions)
 	Game.missions = missions
 	missions.setup()
+	story = Story.new()
+	add_child(story)
 	hud = HUD.new()
 	add_child(hud)
 	hud.touch.look.connect(cam.look)
@@ -57,7 +66,9 @@ func _ready() -> void:
 func _notification(what: int) -> void:
 	# زر الرجوع في الأندرويد + الحفظ عند الخروج من التطبيق
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		if Game.state == Game.State.PLAYING:
+		if Game.state == Game.State.CUTSCENE:
+			story.cut.skip_all()
+		elif Game.state == Game.State.PLAYING:
 			menu.open_pause()
 		elif Game.state == Game.State.PAUSED:
 			menu.resume()
@@ -152,11 +163,16 @@ func start_game() -> void:
 		Game.set_state(Game.State.PAUSED)
 		menu.open_help("play")
 	else:
-		Game.banner.emit("مدينة النخيل", "اركب سيارة وانطلق نحو الدوائر الملوّنة لبدء المهمات", Color(1.0, 0.86, 0.35))
+		if Game.chapter > 0 and Game.chapter < Story.CHAPTERS:
+			Game.banner.emit("حارس النخيل", "اتجه إلى العمود البنفسجي لمتابعة القصة — " + story.next_title(), Color(1.0, 0.86, 0.35))
+		elif Game.chapter >= Story.CHAPTERS:
+			Game.banner.emit("حارس النخيل", "المدينة مفتوحة لك — احمِها من العصابات", Color(1.0, 0.86, 0.35))
 
 
 func to_menu() -> void:
 	Game.save_game()
+	story.abort()
+	player.revert(true)
 	Game.set_state(Game.State.MENU)
 	Sfx.engine_set(false)
 	menu.show_screen("main")
@@ -168,9 +184,22 @@ func unstuck() -> void:
 		Game.car.velocity = Vector3.ZERO
 		Game.car.speed = 0.0
 	else:
-		player.global_position = city.start_pos
+		player.global_position = story.respawn_point()
 		player.velocity = Vector3.ZERO
 	cam.snap()
+
+
+func force_exit_car() -> void:
+	## إخراج البطل من السيارة فوراً (انفجار، مشهد، سقوط)
+	if Game.car == null:
+		return
+	var c: Car = Game.car
+	if c.mode == Car.Mode.PLAYER:
+		c.set_mode(Car.Mode.PARKED)
+	Game.car = null
+	player.exit_car()
+	if c.mode != Car.Mode.WRECK and not abandoned.has(c):
+		abandoned.append(c)
 
 
 func _interact() -> void:
@@ -187,6 +216,9 @@ func _interact() -> void:
 			abandoned.append(c)
 	elif Game.near_car != null:
 		var c: Car = Game.near_car
+		if player.form != 0:
+			Game.notify("عُد إلى هيئتك البشرية لتركب السيارة", Color(1, 0.8, 0.5))
+			return
 		if c.locked():
 			if Game.money >= c.price:
 				c.unlock()
@@ -210,15 +242,20 @@ func _process(delta: float) -> void:
 		if Game.state == Game.State.PAUSED and Game.consume("pause") and menu.pause_box.visible:
 			menu.resume()
 		return
+	if player.dead:
+		return
 	# أقرب سيارة
 	Game.near_car = null
 	if Game.car == null:
 		var best := 4.4
 		for c in Game.cars:
 			var d: float = c.global_position.distance_to(player.global_position)
-			if d < best and abs(c.speed) < 6.0:
+			if d < best and abs(c.speed) < 6.0 and c.mode != Car.Mode.WRECK:
 				best = d
 				Game.near_car = c
+	if Game.chapter == 0 and not story.active:
+		story.begin_intro()
+		return
 	if Game.consume("interact"):
 		_interact()
 	if Game.consume("cam"):

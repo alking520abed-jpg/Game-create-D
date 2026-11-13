@@ -47,9 +47,9 @@ func _center_box(sep := 14) -> VBoxContainer:
 func _build_main() -> void:
 	var vb := _center_box()
 	main_box = vb.get_meta("root")
-	var t := UI.outline(UI.label("مدينة النخيل", 96, Color(1.0, 0.86, 0.35)), 22, Color(0.05, 0.15, 0.2))
+	var t := UI.outline(UI.label("حارس النخيل", 96, Color(1.0, 0.86, 0.35)), 22, Color(0.05, 0.15, 0.2))
 	vb.add_child(t)
-	var st := UI.outline(UI.label("عالم مفتوح • سيارات • مهمات", 30), 12)
+	var st := UI.outline(UI.label("بطل خارق • خمس هيئات • قصة عربية • عالم مفتوح", 30), 12)
 	vb.add_child(st)
 	var sp := Control.new()
 	sp.custom_minimum_size = Vector2(0, 14)
@@ -81,7 +81,7 @@ func _build_pause() -> void:
 		["متابعة اللعب", Color(0.15, 0.6, 0.3), func(): resume()],
 		["شرح الأزرار", Color(0.12, 0.45, 0.75), func(): open_help("pause")],
 		["الإعدادات", Color(0.12, 0.45, 0.75), func(): open_settings("pause")],
-		["إلغاء المهمة الحالية", Color(0.6, 0.4, 0.15), func(): Game.missions.cancel(); resume()],
+		["إلغاء المهمة الجانبية", Color(0.6, 0.4, 0.15), func(): Game.missions.cancel(); resume()],
 		["أنا عالق! أرجعني للساحة", Color(0.6, 0.4, 0.15), func(): Game.main.unstuck(); resume()],
 		["القائمة الرئيسية", Color(0.5, 0.2, 0.2), func(): Game.main.to_menu()],
 	]
@@ -124,11 +124,12 @@ func _build_help() -> void:
 	var foot := [
 		["joy", "", blue, "العصا (يسار الشاشة): حرّك الشخصية"],
 		["drag", "", grey, "اسحب بإصبعك على الشاشة: تدوير الكاميرا"],
-		["jump", "قفز", blue, "قفز"],
-		["run", "جري", green, "جري: اضغط مطوّلاً للركض"],
-		["enter", "اركب", yellow, "اركب: يظهر قرب أي سيارة لتقودها"],
-		["mission", "مهمة", pink, "ابدأ المهمة: يظهر عند الدوائر الملوّنة"],
-		["pause", "", grey, "إيقاف مؤقت وفتح القائمة"],
+		["attack", "هجوم", red, "هجوم: اضغط مطوّلاً — يصوّب تلقائياً نحو أقرب عدو"],
+		["special", "قدرة", pink, "القدرة الخاصة للهيئة الحالية (تحتاج شحناً)"],
+		["form", "تحوّل", Color(0.75, 0.5, 1.0), "أزرار الهيئات ١–٥ أسفل الشاشة: اضغط لتتحوّل، واضغط نفس الزر لتعود بشراً"],
+		["jump", "قفز", blue, "قفز — ومع «لهيب»: صعود / نزول للطيران"],
+		["enter", "اركب", yellow, "اركب: يظهر قرب أي سيارة (بهيئتك البشرية فقط)"],
+		["mission", "مهمة", pink, "ابدأ: يظهر عند عمود القصة البنفسجي والدوائر الملوّنة"],
 	]
 	var car := [
 		["left", "يسار", grey, "يسار / يمين: توجيه السيارة"],
@@ -137,9 +138,9 @@ func _build_help() -> void:
 		["hand", "يدوي", yellow, "فرملة اليد: للانعطاف الحاد والتفحيط"],
 		["horn", "زمور", grey, "زمور"],
 		["exit", "انزل", yellow, "انزل: اخرج من السيارة (بعد التوقف)"],
-		["cam", "", grey, "الكاميرا: قرّب أو بعّد المنظر"],
+		["pause", "", grey, "إيقاف مؤقت — و«الكاميرا» بجانبه لتقريب المنظر"],
 	]
-	for data in [["على الأقدام", foot], ["في السيارة", car]]:
+	for data in [["البطل", foot], ["في السيارة", car]]:
 		var p := UI.panel(Color(0.04, 0.08, 0.14, 0.9), 18, 10)
 		p.custom_minimum_size = Vector2(560, 0)
 		cols.add_child(p)
@@ -210,7 +211,7 @@ func show_screen(n: String) -> void:
 	settings_box.visible = n == "settings"
 	dim.visible = n != "" and n != "main"
 	if n == "main" and Game.missions != null:
-		stats_lbl.text = "النقود: %d ريال   •   النجوم: %d/%d   •   المهمات المنجزة: %d/%d" % [Game.money, Game.stars.size(), Game.missions.star_total, Game.missions.done_count(), Game.missions.defs.size()]
+		stats_lbl.text = "القصة: %d/7   •   النقود: %d ريال   •   النجوم: %d/%d   •   المهمات الجانبية: %d/%d" % [min(Game.chapter, 7), Game.money, Game.stars.size(), Game.missions.star_total, Game.missions.done_count(), Game.missions.defs.size()]
 
 
 func open_pause() -> void:

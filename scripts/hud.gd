@@ -35,7 +35,52 @@ class Arrow:
 		var n := Vector2(-f.y, f.x)
 		draw_colored_polygon(PackedVector2Array([c + f * 20, c - f * 12 + n * 13, c - f * 5, c - f * 12 - n * 13]), Color(1.0, 0.92, 0.2))
 
+class Bars:
+	extends Control
+	## شريط الصحة وطاقة السوار واسم الهيئة
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _process(_d: float) -> void:
+		if is_visible_in_tree():
+			queue_redraw()
+
+	func _bar(y: float, h: float, frac: float, col: Color, text: String) -> void:
+		var w := size.x
+		draw_rect(Rect2(0, y, w, h), Color(0.03, 0.05, 0.09, 0.75))
+		draw_rect(Rect2(2, y + 2, (w - 4) * clamp(frac, 0.0, 1.0), h - 4), col)
+		draw_rect(Rect2(0, y, w, h), Color(1, 1, 1, 0.7), false, 2.0)
+		draw_string(Game.font_bold, Vector2(0, y + h - 5), text, HORIZONTAL_ALIGNMENT_CENTER, w, int(h * 0.62), Color.WHITE)
+
+	func _draw() -> void:
+		var hp: float = Game.hp / Game.MAX_HP
+		_bar(0, 26, hp, Color(0.85, 0.2, 0.18) if hp > 0.3 else Color(1.0, 0.45, 0.1), "الصحة %d" % int(ceil(Game.hp)))
+		var pl = Game.player
+		var col := Color(0.3, 0.75, 1.0)
+		var nm := "السوار"
+		if pl != null and pl.form != 0:
+			col = Player.FORMS[pl.form]["color"]
+			nm = Player.FORMS[pl.form]["name"]
+		_bar(30, 22, Game.energy / Game.MAX_ENERGY, col.darkened(0.15), "%s — طاقة %d" % [nm, int(Game.energy)])
+
+class BossBar:
+	extends Control
+	var frac := 1.0
+	var title := ""
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		custom_minimum_size = Vector2(560, 46)
+
+	func _draw() -> void:
+		var w := size.x
+		draw_string(Game.font_bold, Vector2(0, 18), title, HORIZONTAL_ALIGNMENT_CENTER, w, 20, Color(1, 0.8, 0.75))
+		draw_rect(Rect2(0, 24, w, 20), Color(0.03, 0.03, 0.05, 0.8))
+		draw_rect(Rect2(2, 26, (w - 4) * clamp(frac, 0.0, 1.0), 16), Color(0.9, 0.15, 0.2))
+		draw_rect(Rect2(0, 24, w, 20), Color(1, 1, 1, 0.8), false, 2.0)
+
 var root: Control
+var bars: Bars
+var boss_bar: BossBar
 var touch: TouchControls
 var minimap: Minimap
 var money_lbl: Label
@@ -75,6 +120,16 @@ func _ready() -> void:
 	clock_lbl.position = Vector2(16, 214)
 	clock_lbl.size = Vector2(196, 30)
 	root.add_child(clock_lbl)
+	bars = Bars.new()
+	bars.position = Vector2(16, 248)
+	bars.size = Vector2(196, 54)
+	root.add_child(bars)
+	boss_bar = BossBar.new()
+	boss_bar.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	boss_bar.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	boss_bar.position.y = 178
+	boss_bar.visible = false
+	root.add_child(boss_bar)
 	# النقود والنجوم
 	var mp := UI.panel()
 	mp.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -132,7 +187,7 @@ func _ready() -> void:
 	hint_lbl.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	hint_lbl.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	hint_lbl.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	hint_lbl.position.y = -112
+	hint_lbl.position.y = -150
 	root.add_child(hint_lbl)
 	# الإشعارات
 	toasts = VBoxContainer.new()
@@ -203,25 +258,35 @@ func _process(delta: float) -> void:
 	var label := "اركب"
 	if nc != null and nc.locked():
 		label = "اشترِ"
-	touch.update_state(car != null, nc != null, label, ms.near != null)
+	var st: Story = Game.story
+	touch.update_state(car != null, nc != null, label, ms.near != null or (st != null and st.near))
 	_shown_money = lerp(_shown_money, float(Game.money), min(1.0, delta * 8.0))
 	if abs(_shown_money - Game.money) < 1.0:
 		_shown_money = Game.money
 	money_lbl.text = "%d ريال" % int(round(_shown_money))
 	star_lbl.text = "%d/%d" % [Game.stars.size(), ms.star_total]
 	clock_lbl.text = Game.main.daynight.clock_text()
-	# المهمة
-	if ms.is_active():
+	# المهمة (القصة أولاً ثم المهمات الجانبية)
+	var story_on: bool = st != null and st.active and st.objective != ""
+	var bs = st.boss if st != null else null
+	boss_bar.visible = story_on and bs != null and is_instance_valid(bs) and not bs.dead
+	if boss_bar.visible:
+		boss_bar.frac = bs.hp / bs.max_hp
+		boss_bar.title = bs.k["name"]
+		boss_bar.queue_redraw()
+	if story_on or ms.is_active():
 		m_panel.visible = true
-		m_title.text = ms.active["title"]
-		m_obj.text = ms.objective
-		m_timer.visible = ms.timer >= 0.0 and ms.countdown <= 0.0
+		var tm: float = st.timer if story_on else ms.timer
+		var tg = st.target if story_on else ms.target
+		m_title.text = ("الفصل %d: %s" % [Game.chapter + 1, Story.TITLES[min(Game.chapter, 6)]]) if story_on else ms.active["title"]
+		m_obj.text = st.objective if story_on else ms.objective
+		m_timer.visible = tm >= 0.0 and (story_on or ms.countdown <= 0.0)
 		if m_timer.visible:
-			m_timer.text = "%d:%02d" % [int(ms.timer) / 60, int(ms.timer) % 60]
-			m_timer.add_theme_color_override("font_color", Color(1, 0.35, 0.3) if ms.timer < 10.0 else Color(0.5, 1.0, 0.6))
-		if ms.target != null:
+			m_timer.text = "%d:%02d" % [int(tm) / 60, int(tm) % 60]
+			m_timer.add_theme_color_override("font_color", Color(1, 0.35, 0.3) if tm < 15.0 else Color(0.5, 1.0, 0.6))
+		if tg != null:
 			var pp := Game.pos()
-			var to: Vector3 = ms.target - pp
+			var to: Vector3 = tg - pp
 			m_dist.text = "%d م" % int(Vector2(to.x, to.z).length())
 			var yaw: float = Game.cam.yaw
 			var f := to.x * -sin(yaw) + to.z * -cos(yaw)
@@ -253,4 +318,8 @@ func _process(delta: float) -> void:
 			hint = "اضغط «اركب» لقيادة السيارة (%s)" % nc.spec["name"]
 	if ms.near != null:
 		hint = "%s — اضغط «ابدأ المهمة»" % ms.near["title"]
+	if st != null and st.near:
+		hint = "%s — اضغط «ابدأ المهمة»" % st.next_title()
+	elif st != null and not st.active and car == null and nc == null and ms.near == null and Game.unlocked > 0 and Game.player.form == 0 and Game.combat.alive() > 0 and Game.combat.nearest_enemy(Game.pos(), 30.0) != null:
+		hint = "أعداء قريبون! اضغط أحد أزرار الهيئات لتتحوّل"
 	hint_lbl.text = hint

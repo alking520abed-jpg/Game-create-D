@@ -15,6 +15,8 @@ class TBtn:
 	var pressed := false
 	var touch_idx := -1
 	var pulse := false
+	var dim := false        # مقفل
+	var lit := false        # مفعّل حالياً
 	var _t := 0.0
 
 	func setup(p_kind: String, p_label: String, p_col: Color, p_action: String, p_hold: bool, p_radius: float) -> TBtn:
@@ -45,6 +47,16 @@ class TBtn:
 		var r := radius
 		if pulse:
 			r = radius * (0.94 + 0.06 * sin(_t * 6.0))
+		if kind == "form":
+			var a: float = 0.3 if dim else 1.0
+			draw_circle(c, r, Color(col.r, col.g, col.b, 0.85) if (lit or pressed) else Color(0.04, 0.06, 0.1, 0.55))
+			draw_arc(c, r - 2.0, 0, TAU, 40, Color(col.r, col.g, col.b, a), 4.0, true)
+			var tc := Color(0.05, 0.05, 0.08) if lit else Color(1, 1, 1, a)
+			draw_string(Game.font_bold, Vector2(0, c.y + r * 0.2), label, HORIZONTAL_ALIGNMENT_CENTER, radius * 2, int(r * 0.5), tc)
+			if dim:
+				draw_rect(Rect2(c + Vector2(-r * 0.22, r * 0.38), Vector2(r * 0.44, r * 0.32)), Color(1, 1, 1, 0.6))
+				draw_arc(c + Vector2(0, r * 0.38), r * 0.16, PI, TAU, 10, Color(1, 1, 1, 0.6), 3.0)
+			return
 		draw_circle(c, r, Color(col.r, col.g, col.b, 0.8) if pressed else Color(0.04, 0.06, 0.1, 0.5))
 		if pulse and not pressed:
 			draw_circle(c, r, Color(col.r, col.g, col.b, 0.35))
@@ -70,6 +82,23 @@ var _last_size := Vector2.ZERO
 
 static func draw_icon(ci: CanvasItem, kind: String, c: Vector2, s: float, col: Color) -> void:
 	match kind:
+		"attack":
+			var pts2 := PackedVector2Array()
+			for i in 16:
+				var a2 := TAU * i / 16.0
+				var r2 := s * 1.15 if i % 2 == 0 else s * 0.6
+				pts2.append(c + Vector2(cos(a2), sin(a2)) * r2)
+			ci.draw_colored_polygon(pts2, col)
+			ci.draw_circle(c, s * 0.3, Color(0, 0, 0, 0.45))
+		"special":
+			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(s * 0.35, -s * 1.15), c + Vector2(-s * 0.7, s * 0.15), c + Vector2(-s * 0.05, s * 0.15), c + Vector2(-s * 0.35, s * 1.15), c + Vector2(s * 0.7, -s * 0.2), c + Vector2(s * 0.05, -s * 0.2)]), col)
+		"up":
+			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -s), c + Vector2(s, s * 0.5), c + Vector2(-s, s * 0.5)]), col)
+		"down":
+			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0, s), c + Vector2(s, -s * 0.5), c + Vector2(-s, -s * 0.5)]), col)
+		"form":
+			ci.draw_arc(c, s * 0.9, 0.4, TAU - 0.4, 20, col, s * 0.25, true)
+			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(s * 1.3, -s * 0.5), c + Vector2(s * 0.5, -s * 0.6), c + Vector2(s * 1.0, s * 0.15)]), col)
 		"jump":
 			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -s), c + Vector2(s * 0.9, 0), c + Vector2(s * 0.35, 0), c + Vector2(s * 0.35, s), c + Vector2(-s * 0.35, s), c + Vector2(-s * 0.35, 0), c + Vector2(-s * 0.9, 0)]), col)
 		"gas":
@@ -140,8 +169,16 @@ func _ready() -> void:
 	var blue := Color(0.3, 0.65, 1.0)
 	var yellow := Color(1.0, 0.8, 0.2)
 	var grey := Color(0.8, 0.82, 0.88)
-	_add("jump", "قفز", blue, "jump", false, 74)
+	_add("jump", "قفز", blue, "jump", false, 62)
 	_add("run", "جري", green, "run", true, 58)
+	_add("attack", "هجوم", red, "attack", true, 86)
+	_add("special", "قدرة", Color(1.0, 0.5, 0.9), "special", false, 60)
+	_add("up", "صعود", blue, "fly_up", true, 58)
+	_add("down", "نزول", blue, "fly_down", true, 60)
+	for i in 5:
+		var fm: Dictionary = Player.FORMS[i + 1]
+		_add("form%d" % (i + 1), fm["name"], fm["color"], "form%d" % (i + 1), false, 42)
+		buttons["form%d" % (i + 1)].kind = "form"
 	_add("enter", "اركب", yellow, "interact", false, 64)
 	_add("mission", "ابدأ المهمة", Color(1.0, 0.5, 0.9), "mission", false, 70)
 	_add("left", "يسار", grey, "steer_left", true, 84)
@@ -169,9 +206,15 @@ func _layout() -> void:
 	var W := s.x
 	var H := s.y
 	joy_center = Vector2(185, H - 185)
-	buttons["jump"].place(Vector2(W - 135, H - 140))
-	buttons["run"].place(Vector2(W - 300, H - 100))
-	buttons["enter"].place(Vector2(W - 120, H - 310))
+	buttons["attack"].place(Vector2(W - 130, H - 140))
+	buttons["jump"].place(Vector2(W - 312, H - 98))
+	buttons["down"].place(Vector2(W - 312, H - 98))
+	buttons["special"].place(Vector2(W - 285, H - 248))
+	buttons["enter"].place(Vector2(W - 112, H - 318))
+	buttons["up"].place(Vector2(W - 112, H - 318))
+	buttons["run"].place(Vector2(-500, -500))
+	for i in 5:
+		buttons["form%d" % (i + 1)].place(Vector2(W * 0.5 - 196 + i * 92 + 14, H - 54))
 	buttons["left"].place(Vector2(125, H - 140))
 	buttons["right"].place(Vector2(320, H - 140))
 	buttons["gas"].place(Vector2(W - 135, H - 150))
@@ -179,7 +222,7 @@ func _layout() -> void:
 	buttons["hand"].place(Vector2(W - 300, H - 270))
 	buttons["horn"].place(Vector2(W - 110, H - 320))
 	buttons["exit"].place(Vector2(W - 480, H - 85))
-	buttons["mission"].place(Vector2(W - 460, H - 230))
+	buttons["mission"].place(Vector2(W - 455, H - 215))
 	buttons["pause"].place(Vector2(W - 50, 118))
 	buttons["cam"].place(Vector2(W - 132, 118))
 
@@ -192,12 +235,37 @@ func update_state(p_in_car: bool, can_enter: bool, enter_label: String, mission_
 		in_car = p_in_car
 		_release_all()
 		queue_redraw()
-	for k in ["jump", "run"]:
-		buttons[k].visible = not in_car
+	var pl: Player = Game.player
+	var fly: bool = pl != null and pl.flying() and not in_car
+	var fidx: int = pl.form if pl != null else 0
+	buttons["run"].visible = false
+	buttons["jump"].visible = not in_car and not fly
+	buttons["up"].visible = fly
+	buttons["down"].visible = fly
+	buttons["attack"].visible = not in_car
+	var sb: TBtn = buttons["special"]
+	sb.visible = not in_car and fidx != 0
+	if sb.visible:
+		var txt: String = Player.FORMS[fidx]["sp_name"]
+		if pl.sp_cd > 0.0:
+			txt = "%d ث" % int(ceil(pl.sp_cd))
+		if sb.label != txt or sb.col != Player.FORMS[fidx]["color"]:
+			sb.label = txt
+			sb.col = Player.FORMS[fidx]["color"]
+			sb.queue_redraw()
+	for i in 5:
+		var fb: TBtn = buttons["form%d" % (i + 1)]
+		fb.visible = not in_car and Game.unlocked > 0
+		var d: bool = i + 1 > Game.unlocked
+		var l: bool = fidx == i + 1
+		if fb.dim != d or fb.lit != l:
+			fb.dim = d
+			fb.lit = l
+			fb.queue_redraw()
 	for k in ["left", "right", "gas", "brake", "hand", "horn", "exit"]:
 		buttons[k].visible = in_car
 	var e: TBtn = buttons["enter"]
-	e.visible = not in_car and can_enter
+	e.visible = not in_car and can_enter and not fly
 	if e.label != enter_label:
 		e.label = enter_label
 		e.kind = "buy" if enter_label != "اركب" else "enter"

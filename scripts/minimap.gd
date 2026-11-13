@@ -54,6 +54,26 @@ func _draw() -> void:
 			var r := 8.0 + sin(_t * 6.0) * 2.5
 			draw_circle(q, r + 2.0, Color.BLACK)
 			draw_circle(q, r, Color(1.0, 0.92, 0.2))
+	# القصة والأعداء
+	var st = Game.story
+	if st != null:
+		if st.marker.visible:
+			var mp: Vector2 = to_map.call(st.marker.position)
+			var mq := mp.clamp(Vector2(10, 10), size - Vector2(10, 10))
+			var rr := 7.0 + sin(_t * 5.0) * 2.0
+			draw_circle(mq, rr + 2.0, Color.BLACK)
+			draw_circle(mq, rr, Color(0.8, 0.45, 1.0))
+		elif st.active and st.target != null:
+			var tp: Vector2 = to_map.call(st.target)
+			var tq := tp.clamp(Vector2(10, 10), size - Vector2(10, 10))
+			draw_circle(tq, 9.0, Color.BLACK)
+			draw_circle(tq, 7.0, Color(1.0, 0.92, 0.2))
+	if Game.combat != null:
+		for e in Game.combat.enemies:
+			if is_instance_valid(e) and not e.dead:
+				var ep: Vector2 = to_map.call(e.global_position)
+				if Rect2(Vector2.ZERO, size).has_point(ep):
+					draw_circle(ep, 5.0 if e.is_boss() else 3.5, Color(1.0, 0.15, 0.1))
 	# اللاعب
 	var yaw: float = Game.car.rotation.y if Game.car != null else (Game.player.rig.rotation.y if Game.player != null else 0.0)
 	var f := Vector2(-sin(yaw), -cos(yaw))

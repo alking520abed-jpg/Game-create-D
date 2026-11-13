@@ -189,6 +189,8 @@ func _process(delta: float) -> void:
 	# البحث عن مهمة قريبة
 	near = null
 	if active.is_empty():
+		if Game.story and (Game.story.active or Game.story.near):
+			return
 		for d in defs:
 			if pp.distance_to(d["pos"]) < 7.5:
 				near = d

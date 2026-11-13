@@ -7,7 +7,7 @@ signal banner(title: String, sub: String, color: Color)
 signal state_changed
 signal settings_changed
 
-enum State { MENU, PLAYING, PAUSED }
+enum State { MENU, PLAYING, PAUSED, CUTSCENE }
 
 const SAVE_PATH := "user://save.cfg"
 
@@ -19,6 +19,18 @@ var best := {}
 var owned := {}
 var settings := {"quality": 1, "sound": true, "music": true}
 var help_seen := false
+
+# --- البطل الخارق ---
+const MAX_HP := 100.0
+const MAX_ENERGY := 100.0
+var hp := MAX_HP
+var energy := MAX_ENERGY
+var unlocked := 0        # عدد الهيئات المفتوحة (0..5)
+var chapter := 0         # الفصل الحالي من القصة
+var choice := ""         # اختيار اللاعب في القصة: "mercy" أو "justice"
+var kills := 0
+var combat = null
+var story = null
 
 var main: Node = null
 var player = null
@@ -33,7 +45,7 @@ var font_bold: FontVariation
 var font: Font
 var near_car = null     # أقرب سيارة يمكن ركوبها
 var _taps := {}
-const ONE_SHOT := ["jump", "interact", "mission", "horn", "cam", "pause"]
+const ONE_SHOT := ["jump", "interact", "mission", "horn", "cam", "pause", "special", "morph", "form1", "form2", "form3", "form4", "form5", "revert", "skip"]
 
 
 func _ready() -> void:
@@ -60,6 +72,14 @@ func _setup_input() -> void:
 		"horn": [KEY_H],
 		"cam": [KEY_C],
 		"pause": [KEY_ESCAPE, KEY_P],
+		"attack": [KEY_J],
+		"special": [KEY_K],
+		"morph": [KEY_TAB],
+		"form1": [KEY_1], "form2": [KEY_2], "form3": [KEY_3], "form4": [KEY_4], "form5": [KEY_5],
+		"revert": [KEY_R, KEY_0],
+		"fly_up": [KEY_SPACE],
+		"fly_down": [KEY_Q, KEY_CTRL],
+		"skip": [KEY_ENTER, KEY_SPACE],
 	}
 	for a in map:
 		if not InputMap.has_action(a):
@@ -130,6 +150,10 @@ func save_game() -> void:
 	cf.set_value("g", "owned", owned)
 	cf.set_value("g", "settings", settings)
 	cf.set_value("g", "help_seen", help_seen)
+	cf.set_value("g", "unlocked", unlocked)
+	cf.set_value("g", "chapter", chapter)
+	cf.set_value("g", "choice", choice)
+	cf.set_value("g", "kills", kills)
 	cf.save(SAVE_PATH)
 
 
@@ -148,6 +172,10 @@ func load_game() -> void:
 	for k in s:
 		settings[k] = s[k]
 	help_seen = cf.get_value("g", "help_seen", false)
+	unlocked = cf.get_value("g", "unlocked", 0)
+	chapter = cf.get_value("g", "chapter", 0)
+	choice = cf.get_value("g", "choice", "")
+	kills = cf.get_value("g", "kills", 0)
 
 
 func reset_save() -> void:
@@ -156,5 +184,11 @@ func reset_save() -> void:
 	done = {}
 	best = {}
 	owned = {}
+	unlocked = 0
+	chapter = 0
+	choice = ""
+	kills = 0
+	hp = MAX_HP
+	energy = MAX_ENERGY
 	save_game()
 	money_changed.emit()
