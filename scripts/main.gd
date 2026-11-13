@@ -13,6 +13,7 @@ var hud: HUD
 var menu: Menu
 var peds: Array = []
 var abandoned: Array = []
+var start_car: Car
 var _tick := 0.0
 var _edge_cd := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -48,6 +49,7 @@ func _ready() -> void:
 	menu = Menu.new()
 	add_child(menu)
 	Game.settings_changed.connect(_on_settings)
+	Game.skin_changed.connect(_on_skin)
 	_on_settings()
 	for a in OS.get_cmdline_user_args():
 		if a == "--autotest" or a == "--simtest":
@@ -94,6 +96,8 @@ func _spawn_cars() -> void:
 	var sc := _new_car("sedan", Color("c0392b"))
 	sc.global_position = city.start_car["pos"]
 	sc.rotation.y = city.start_car["yaw"]
+	sc.apply_skin(Game.skin)
+	start_car = sc
 	for s in city.parked_spots:
 		var id := _rand_type()
 		var c := _new_car(id, Color("f1c40f") if id == "taxi" else _rand_color())
@@ -129,6 +133,14 @@ func _spawn_ai(near: Vector3, min_d: float, max_d: float, car: Car = null) -> vo
 			car = _new_car(id, Color("f1c40f") if id == "taxi" else _rand_color())
 		car.ai_start(lane)
 		return
+
+
+## السكن المختار يُطبَّق على السيارة التي تقودها (أو سيارتك عند نقطة البداية)
+func _on_skin() -> void:
+	if Game.car != null:
+		Game.car.apply_skin(Game.skin)
+	elif is_instance_valid(start_car):
+		start_car.apply_skin(Game.skin)
 
 
 func _on_settings() -> void:
@@ -198,6 +210,7 @@ func _interact() -> void:
 				Sfx.play("fail", -10.0)
 			return
 		player.enter_car(c)
+		c.apply_skin(Game.skin)
 		c.set_mode(Car.Mode.PLAYER)
 		Game.car = c
 		abandoned.erase(c)

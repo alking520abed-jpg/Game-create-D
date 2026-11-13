@@ -14,14 +14,30 @@ const SPECS := {
 }
 const COLORS := ["c0392b", "2a6fb8", "f2f2f2", "1d1f24", "8e9aa6", "2e8b57", "e67e22", "6c3fa0", "d4b483", "14808a"]
 
+## السكنات: طلاء ونقوش تُبنى بالكود فوق مجسم السيارة.
+## col: لون الهيكل، stripes: خطان فوق الغطاء والسقف، roof: سقف بلون آخر، side: خط جانبي،
+## pin: خط رفيع مائل للجنب، camo: بقع تمويه، neon: خطوط مضيئة وتوهج تحت السيارة، fin: نوع اللمعة.
+const SKINS := [
+	{"id": "stock", "name": "الأصلي", "price": 0},
+	{"id": "racing", "name": "خطوط سباق", "price": 300, "col": "c9252b", "stripes": "f4f4f0"},
+	{"id": "classic", "name": "كلاسيك", "price": 400, "col": "1b7f8c", "roof": "f1ece0", "side": "f1ece0"},
+	{"id": "desert", "name": "صحراوي", "price": 500, "col": "c8a56a", "camo": ["7a5a34", "8d8a55"], "fin": "matte", "rim": "4a4336"},
+	{"id": "matte", "name": "أسود مطفي", "price": 700, "col": "1b1c20", "side": "e0322f", "pin": "e0322f", "fin": "matte", "rim": "e0322f"},
+	{"id": "palm", "name": "النخيل", "price": 900, "col": "0e6b4b", "stripes": "e3bd55", "side": "e3bd55", "rim": "e3bd55"},
+	{"id": "neon", "name": "نيون", "price": 1500, "col": "17142e", "neon": "19e6ff", "rim": "19e6ff"},
+	{"id": "gold", "name": "ذهبي", "price": 3000, "col": "e2b33c", "fin": "chrome", "rim": "f3d985"},
+]
+
 static var _meshes := {}
 static var _wheels := {}
 static var _mats := {}
 static var _dust_tex: Texture2D
+static var _glow_mats := {}
 
 var spec_id := "sedan"
 var spec := {}
 var color := Color.WHITE
+var skin_id := "stock"
 var mode: int = Mode.PARKED
 var speed := 0.0
 var steer := 0.0
@@ -35,6 +51,8 @@ var _tag: Label3D
 var _light: SpotLight3D
 var _dust: CPUParticles3D
 var _horn_cd := 0.0
+var _mi: MeshInstance3D
+var _glow: MeshInstance3D
 
 # الذكاء الاصطناعي
 var ai_a := Vector2i.ZERO
@@ -59,6 +77,11 @@ static func mat(n: String) -> Material:
 		_mats["head"] = MeshBuilder.emissive(Color(1.0, 0.97, 0.85), 0.6)
 		_mats["tail"] = MeshBuilder.emissive(Color(0.9, 0.05, 0.05), 0.8)
 		_mats["tire"] = MeshBuilder.vc_material(0.8, 0.1)
+		_mats["paint_matte"] = MeshBuilder.vc_material(0.82, 0.0)
+		_mats["paint_chrome"] = MeshBuilder.vc_material(0.2, 0.7)
+		var ne := MeshBuilder.vc_material(1.0, 0.0)
+		ne.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_mats["neon"] = ne
 	return _mats[n]
 
 
@@ -68,10 +91,35 @@ static func set_night(n: float) -> void:
 	_mats["tail"].emission_energy_multiplier = 0.6 + n * 2.0
 
 
-static func body_mesh(id: String, col: Color) -> ArrayMesh:
-	var key := id + col.to_html()
+static func skin_def(id: String) -> Dictionary:
+	for sk in SKINS:
+		if sk["id"] == id:
+			return sk
+	return SKINS[0]
+
+
+## شريط ملوّن يتبع سطح الهيكل (نقاط جانبية z,y) عند الموضع x
+static func _strip(mb: MeshBuilder, pts: Array, x: float, w: float, col: Color) -> void:
+	for i in pts.size() - 1:
+		var a: Vector2 = pts[i]
+		var b: Vector2 = pts[i + 1]
+		var n := Vector2(-(b.y - a.y), b.x - a.x).normalized() * 0.009
+		if n.y < 0.0:
+			n = -n
+		a += n
+		b += n
+		mb.quad(Vector3(x - w / 2, a.y, a.x), Vector3(x + w / 2, a.y, a.x), Vector3(x + w / 2, b.y, b.x), Vector3(x - w / 2, b.y, b.x),
+			col, Vector3(x, min(a.y, b.y) - 1.0, (a.x + b.x) / 2))
+
+
+static func body_mesh(id: String, col: Color, skin := "stock") -> ArrayMesh:
+	var sk := skin_def(skin)
+	if sk.has("col"):
+		col = Color(sk["col"])
+	var key: String = id + col.to_html() + sk["id"]
 	if _meshes.has(key):
 		return _meshes[key]
+	var roofc: Color = Color(sk["roof"]) if sk.has("roof") else col
 	var s: Dictionary = SPECS[id]
 	var L: float = s["len"]
 	var W: float = s["wid"]
@@ -94,14 +142,14 @@ static func body_mesh(id: String, col: Color) -> ArrayMesh:
 	var tz1: float = z1 - s["inr"]
 	var tw: float = W * s["topw"]
 	gl.frustum(belt - 0.01, top, z0 + 0.05, z1 - 0.05, W - 0.14, tz0, tz1, tw, Color.WHITE)
-	mb.box(Vector3(0, top + 0.025, (tz0 + tz1) / 2), Vector3(tw + 0.06, 0.07, tz1 - tz0 + 0.08), col)
+	mb.box(Vector3(0, top + 0.025, (tz0 + tz1) / 2), Vector3(tw + 0.06, 0.07, tz1 - tz0 + 0.08), roofc)
 	# عمود وسطي + أعمدة الزوايا
 	var zc := (tz0 + tz1) / 2 + 0.1
 	for sx in [-1.0, 1.0]:
 		mb.quad(Vector3(sx * (W / 2 - 0.06), belt, zc - 0.07), Vector3(sx * (W / 2 - 0.06), belt, zc + 0.07),
-			Vector3(sx * (tw / 2 + 0.012), top, zc + 0.07), Vector3(sx * (tw / 2 + 0.012), top, zc - 0.07), col, Vector3(0, 1, zc))
+			Vector3(sx * (tw / 2 + 0.012), top, zc + 0.07), Vector3(sx * (tw / 2 + 0.012), top, zc - 0.07), roofc, Vector3(0, 1, zc))
 		# مرايا
-		mb.box(Vector3(sx * (W / 2 + 0.07), belt + 0.08, z0 + 0.3), Vector3(0.14, 0.1, 0.18), col)
+		mb.box(Vector3(sx * (W / 2 + 0.07), belt + 0.08, z0 + 0.3), Vector3(0.14, 0.1, 0.18), roofc)
 		# أقواس العجلات
 		for wz in [-L * 0.3, L * 0.3]:
 			mb.cyl(Vector3(sx * (W / 2 - 0.4), wr, wz), Vector3(sx * (W / 2 + 0.012), wr, wz), wr + 0.09, wr + 0.09, 10, dark)
@@ -138,7 +186,67 @@ static func body_mesh(id: String, col: Color) -> ArrayMesh:
 			for sx in [-1.0, 1.0]:
 				mb.box(Vector3(sx * (W / 2 - 0.07), belt + 0.14, bz), Vector3(0.14, 0.28, bl - 0.05), col)
 			mb.box(Vector3(0, belt + 0.14, hl - 0.07), Vector3(W, 0.28, 0.14), col)
-	var mesh := mb.commit(mat("paint"))
+	# ---------- نقوش السكن ----------
+	var nb := MeshBuilder.new()
+	var hood_pts := [Vector2(-hl, belt - 0.24), Vector2(-hl + 0.22, belt - 0.09), Vector2(z0, belt)]
+	var roof_pts := [Vector2(tz0 - 0.04, top + 0.06), Vector2(tz1 + 0.04, top + 0.06)]
+	var trunk_pts := [Vector2(z1, belt), Vector2(hl - 0.12, belt - 0.04), Vector2(hl, belt - 0.22)]
+	var has_trunk: bool = id != "pickup" and s["trunk"] > 0.4
+	# منطقة الأبواب بين أقواس العجلات
+	var dz0: float = -L * 0.3 + wr + 0.13
+	var dz1: float = L * 0.3 - wr - 0.13
+	if sk.has("stripes"):
+		var sc := Color(sk["stripes"])
+		var sxo := 0.37 if id in ["sport", "super"] else 0.17
+		var sw := 0.16 if id in ["sport", "super"] else 0.2
+		for sx in [-1.0, 1.0]:
+			_strip(mb, hood_pts, sx * sxo, sw, sc)
+			_strip(mb, roof_pts, sx * sxo, sw, sc)
+			if has_trunk:
+				_strip(mb, trunk_pts, sx * sxo, sw, sc)
+	if sk.has("side"):
+		var sdc := Color(sk["side"])
+		for sx in [-1.0, 1.0]:
+			mb.box(Vector3(sx * (W / 2 + 0.003), belt - 0.13, (dz0 + dz1) / 2), Vector3(0.022, 0.07, dz1 - dz0), sdc)
+	if sk.has("pin"):
+		var pc := Color(sk["pin"])
+		_strip(mb, hood_pts, W * 0.27, 0.07, pc)
+		_strip(mb, roof_pts, W * 0.27, 0.07, pc)
+		if has_trunk:
+			_strip(mb, trunk_pts, W * 0.27, 0.07, pc)
+	if sk.has("camo"):
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash(id) + 77
+		var cc: Array = sk["camo"]
+		for i in 9:
+			var c1 := Color(cc[i % cc.size()])
+			# بقع فوق الغطاء والسقف
+			var hz := rng.randf_range(-hl + 0.3, z0 - 0.35)
+			var hy := belt - 0.09 + 0.09 * (hz + hl - 0.22) / (z0 + hl - 0.22)
+			var dy: float = 0.09 * 0.4 / (z0 + hl - 0.22)
+			_strip(mb, [Vector2(hz - 0.2, hy - dy / 2), Vector2(hz + 0.2, hy + dy / 2)], rng.randf_range(-W * 0.36, W * 0.36), rng.randf_range(0.25, 0.5), c1)
+			var rz := rng.randf_range(tz0 + 0.15, max(tz0 + 0.2, tz1 - 0.15))
+			_strip(mb, [Vector2(rz - 0.18, top + 0.06), Vector2(rz + 0.18, top + 0.06)], rng.randf_range(-tw * 0.3, tw * 0.3), rng.randf_range(0.22, 0.42), c1)
+			# بقع على الأبواب
+			var pl := rng.randf_range(0.3, 0.6)
+			var ph := rng.randf_range(0.12, min(0.26, (belt - cl - 0.3) * 0.6))
+			var pz := rng.randf_range(dz0 + pl / 2, dz1 - pl / 2)
+			var py := rng.randf_range(cl + 0.22 + ph / 2, belt - 0.05 - ph / 2)
+			mb.box(Vector3((1.0 if i % 2 == 0 else -1.0) * (W / 2 + 0.002), py, pz), Vector3(0.016, ph, pl), c1)
+	if sk.has("neon"):
+		var nc := Color(sk["neon"])
+		for sx in [-1.0, 1.0]:
+			nb.box(Vector3(sx * (W / 2 + 0.004), belt - 0.13, (dz0 + dz1) / 2), Vector3(0.024, 0.035, dz1 - dz0), nc)
+			nb.box(Vector3(sx * (W / 2 - 0.05), cl - 0.01, 0), Vector3(0.05, 0.035, dz1 - dz0 + 0.2), nc)
+			_strip(nb, hood_pts, sx * (W / 2 - 0.16), 0.035, nc)
+			_strip(nb, roof_pts, sx * (tw / 2 - 0.05), 0.035, nc)
+			if has_trunk:
+				_strip(nb, trunk_pts, sx * (W / 2 - 0.16), 0.035, nc)
+		nb.box(Vector3(0, cl + 0.03, -hl - 0.1), Vector3(W * 0.7, 0.03, 0.03), nc)
+		nb.box(Vector3(0, cl + 0.03, hl + 0.1), Vector3(W * 0.7, 0.03, 0.03), nc)
+	var fin: String = sk.get("fin", "")
+	var mesh := mb.commit(mat("paint" if fin == "" else "paint_" + fin))
+	nb.commit(mat("neon"), mesh)
 	gl.commit(mat("glass"), mesh)
 	hd.commit(mat("head"), mesh)
 	tl.commit(mat("tail"), mesh)
@@ -146,17 +254,96 @@ static func body_mesh(id: String, col: Color) -> ArrayMesh:
 	return mesh
 
 
-static func wheel_mesh(r: float) -> ArrayMesh:
-	var key := snappedf(r, 0.01)
+static func wheel_mesh(r: float, rim := Color(0.75, 0.76, 0.8)) -> ArrayMesh:
+	var key := "%.2f%s" % [r, rim.to_html()]
 	if _wheels.has(key):
 		return _wheels[key]
 	var mb := MeshBuilder.new()
 	mb.cyl(Vector3(-0.13, 0, 0), Vector3(0.13, 0, 0), r, r, 12, Color(0.06, 0.06, 0.07))
-	mb.cyl(Vector3(-0.14, 0, 0), Vector3(0.14, 0, 0), r * 0.62, r * 0.62, 5, Color(0.75, 0.76, 0.8))
+	mb.cyl(Vector3(-0.14, 0, 0), Vector3(0.14, 0, 0), r * 0.62, r * 0.62, 5, rim)
 	mb.cyl(Vector3(-0.15, 0, 0), Vector3(0.15, 0, 0), r * 0.2, r * 0.2, 6, Color(0.3, 0.3, 0.33))
 	var m := mb.commit(mat("tire"))
 	_wheels[key] = m
 	return m
+
+
+static func skin_wheel(id: String, skin: String) -> ArrayMesh:
+	var sk := skin_def(skin)
+	var r: float = SPECS[id]["wr"]
+	return wheel_mesh(r, Color(sk["rim"])) if sk.has("rim") else wheel_mesh(r)
+
+
+## توهج النيون على الأرض تحت السيارة (أو null إذا السكن بدون نيون)
+static func glow_node(id: String, skin: String) -> MeshInstance3D:
+	var sk := skin_def(skin)
+	if not sk.has("neon"):
+		return null
+	var nc := Color(sk["neon"])
+	var k := nc.to_html()
+	if not _glow_mats.has(k):
+		var g := Gradient.new()
+		g.set_color(0, Color(1, 1, 1, 1))
+		g.set_color(1, Color(1, 1, 1, 0))
+		var gt := GradientTexture2D.new()
+		gt.gradient = g
+		gt.fill = GradientTexture2D.FILL_RADIAL
+		gt.fill_from = Vector2(0.5, 0.5)
+		gt.fill_to = Vector2(1.0, 0.5)
+		gt.width = 64
+		gt.height = 64
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		m.albedo_texture = gt
+		m.albedo_color = Color(nc.r, nc.g, nc.b, 0.75)
+		_glow_mats[k] = m
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(SPECS[id]["wid"] + 2.4, SPECS[id]["len"] + 2.0)
+	pm.material = _glow_mats[k]
+	var mi := MeshInstance3D.new()
+	mi.mesh = pm
+	mi.position.y = 0.05
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.visibility_range_end = 140.0
+	return mi
+
+
+## مجسم للعرض فقط (معاينة السكنات في القائمة)
+static func display_model(id: String, col: Color, skin: String) -> Node3D:
+	var root := Node3D.new()
+	var sp: Dictionary = SPECS[id]
+	var mi := MeshInstance3D.new()
+	mi.mesh = body_mesh(id, col, skin)
+	root.add_child(mi)
+	var wm := skin_wheel(id, skin)
+	for sz in [-1.0, 1.0]:
+		for sx in [-1.0, 1.0]:
+			var w := MeshInstance3D.new()
+			w.mesh = wm
+			w.position = Vector3(sx * (sp["wid"] / 2 - 0.15), sp["wr"], sz * sp["len"] * 0.3)
+			root.add_child(w)
+	var g := glow_node(id, skin)
+	if g:
+		root.add_child(g)
+	return root
+
+
+func apply_skin(id: String) -> void:
+	id = skin_def(id)["id"]
+	if id == skin_id:
+		return
+	skin_id = id
+	_mi.mesh = body_mesh(spec_id, color, id)
+	var wm := skin_wheel(spec_id, id)
+	for w in wheel_meshes:
+		w.mesh = wm
+	if _glow:
+		_glow.queue_free()
+		_glow = null
+	_glow = glow_node(spec_id, id)
+	if _glow:
+		add_child(_glow)
 
 
 func setup(id: String, col: Color) -> void:
@@ -179,6 +366,7 @@ func setup(id: String, col: Color) -> void:
 	mi.mesh = body_mesh(id, col)
 	mi.visibility_range_end = 260.0
 	body.add_child(mi)
+	_mi = mi
 	var wr: float = spec["wr"]
 	var wm := wheel_mesh(wr)
 	for sz in [-1.0, 1.0]:

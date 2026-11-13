@@ -6,6 +6,7 @@ signal toast(text: String, color: Color)
 signal banner(title: String, sub: String, color: Color)
 signal state_changed
 signal settings_changed
+signal skin_changed
 
 enum State { MENU, PLAYING, PAUSED }
 
@@ -17,6 +18,8 @@ var stars := {}
 var done := {}
 var best := {}
 var owned := {}
+var skin := "stock"     # سكن السيارة المختار
+var skins := {}         # السكنات المشتراة
 var settings := {"quality": 1, "sound": true, "music": true}
 var help_seen := false
 
@@ -121,6 +124,32 @@ func set_state(s: int) -> void:
 	state_changed.emit()
 
 
+func has_skin(id: String) -> bool:
+	return skins.has(id) or Car.skin_def(id)["price"] == 0
+
+
+func set_skin(id: String) -> void:
+	if not has_skin(id) or Car.skin_def(id)["id"] != id:
+		return
+	skin = id
+	save_game()
+	skin_changed.emit()
+
+
+## يشتري السكن (إن لم يكن مملوكاً) ويختاره. يرجع false إذا النقود لا تكفي.
+func buy_skin(id: String) -> bool:
+	var sk := Car.skin_def(id)
+	if sk["id"] != id:
+		return false
+	if not has_skin(id):
+		if money < sk["price"]:
+			return false
+		skins[id] = true
+		add_money(-sk["price"])
+	set_skin(id)
+	return true
+
+
 func save_game() -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("g", "money", money)
@@ -128,6 +157,8 @@ func save_game() -> void:
 	cf.set_value("g", "done", done)
 	cf.set_value("g", "best", best)
 	cf.set_value("g", "owned", owned)
+	cf.set_value("g", "skin", skin)
+	cf.set_value("g", "skins", skins)
 	cf.set_value("g", "settings", settings)
 	cf.set_value("g", "help_seen", help_seen)
 	cf.save(SAVE_PATH)
@@ -144,6 +175,10 @@ func load_game() -> void:
 	done = cf.get_value("g", "done", {})
 	best = cf.get_value("g", "best", {})
 	owned = cf.get_value("g", "owned", {})
+	skins = cf.get_value("g", "skins", {})
+	skin = cf.get_value("g", "skin", "stock")
+	if not has_skin(skin):
+		skin = "stock"
 	var s = cf.get_value("g", "settings", {})
 	for k in s:
 		settings[k] = s[k]
@@ -156,5 +191,8 @@ func reset_save() -> void:
 	done = {}
 	best = {}
 	owned = {}
+	skins = {}
+	skin = "stock"
 	save_game()
 	money_changed.emit()
+	skin_changed.emit()

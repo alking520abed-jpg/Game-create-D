@@ -23,10 +23,42 @@ func wait(t: float) -> void:
 	await get_tree().create_timer(t, true).timeout
 
 
+## صور السكنات: شاشة الاختيار + كل سكن على السيارة داخل المدينة
+func _skins(m) -> void:
+	Game.money = 2000
+	Game.skins = {"racing": true}
+	m.menu.open_skins("main")
+	m.menu._sk_pick("neon")
+	await wait(1.0)
+	await shot("16_skins")
+	m.menu.show_screen("")
+	Game.help_seen = true
+	m.start_game()
+	for sk in Car.SKINS:
+		Game.skins[sk["id"]] = true
+	var types := ["sedan", "sport", "suv", "pickup", "super", "taxi", "sedan", "super"]
+	var base: Vector3 = City.node_pos(5, 6) + Vector3(-City.LANE, 0, -20)
+	for i in Car.SKINS.size():
+		var c: Car = m._new_car(types[i], Color("2a6fb8"))
+		c.global_position = base + Vector3(0, 0, -i * 400.0 / Car.SKINS.size())
+		c.rotation.y = 0.9
+		c.apply_skin(Car.SKINS[i]["id"])
+		m.player.global_position = c.global_position + Vector3(-4.0, 0.1, 5.0)
+		m.daynight.hour = 21.5 if Car.SKINS[i]["id"] == "neon" else 10.0
+		m.cam.snap()
+		m.cam.yaw = 0.2
+		await wait(1.2)
+		await shot("17_skin_" + Car.SKINS[i]["id"])
+	get_tree().quit()
+
+
 func _run() -> void:
 	var m = Game.main
 	await wait(2.0)
 	await shot("01_menu")
+	if OS.get_environment("SHOT_ONLY") == "skins":
+		await _skins(m)
+		return
 	Game.help_seen = false
 	m.start_game()
 	await wait(0.5)

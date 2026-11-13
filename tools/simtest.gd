@@ -175,6 +175,30 @@ func _run() -> void:
 	check(Game.car != null and Game.car.spec_id == "suv", "ركب الجيب")
 	Game.tap("interact")
 	await wait(0.4)
+	print("== السكنات ==")
+	Game.money = 100
+	check(not Game.buy_skin("racing") and Game.skin == "stock", "لا شراء سكن بدون نقود")
+	Game.money = 1000
+	check(Game.buy_skin("racing") and Game.money == 700 and Game.skin == "racing", "اشترى سكن خطوط السباق")
+	check(Game.buy_skin("racing") and Game.money == 700, "لا يدفع مرتين لنفس السكن")
+	check(not Game.buy_skin("nope"), "سكن غير موجود")
+	Game.tap("interact")
+	await wait(0.4)
+	check(Game.car != null and Game.car.skin_id == "racing", "السكن على السيارة عند الركوب")
+	Game.set_skin("stock")
+	check(Game.car.skin_id == "stock", "تغيير السكن أثناء القيادة")
+	Game.set_skin("neon")
+	check(Game.skin == "stock", "لا يختار سكناً غير مملوك")
+	for sk in Car.SKINS:
+		for cid in Car.SPECS:
+			Car.body_mesh(cid, Color.RED, sk["id"])
+	check(true, "بناء كل السكنات لكل السيارات")
+	m.menu.open_skins("pause")
+	m.menu._sk_pick("gold")
+	check(m.menu._sk_action.disabled, "زر الشراء مقفل عند نقص النقود")
+	m.menu.show_screen("")
+	Game.tap("interact")
+	await wait(0.4)
 	print("== المرور لمدة 90 ثانية ==")
 	put(City.block_center(4, 5) + Vector3(0, 0, 0))
 	var start := {}
