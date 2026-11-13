@@ -1,0 +1,8 @@
+.godot/
+*.apk
+*.aab
+*.idsig
+android/
+build/
+# debug keystore غير سري (كلمة السر القياسية android)
+.DS_Store

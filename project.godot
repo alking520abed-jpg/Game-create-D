@@ -1,0 +1,54 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+
+config/name="مدينة النخيل"
+config/description="لعبة عالم مفتوح عربية: سيارات، مهمات جانبية، ومدينة كاملة."
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.5", "GL Compatibility")
+config/icon="res://icon.png"
+config/quit_on_go_back=false
+boot_splash/bg_color=Color(0.07, 0.16, 0.22, 1)
+boot_splash/image="res://icon.png"
+boot_splash/fullsize=false
+
+[autoload]
+
+Game="*res://scripts/game.gd"
+Sfx="*res://scripts/sfx.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=4
+
+[gui]
+
+theme/custom_font="res://fonts/Cairo.ttf"
+theme/default_font_multichannel_signed_distance_field=false
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="vehicles"
+3d_physics/layer_3="player"
+
+[physics]
+
+common/physics_ticks_per_second=60
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+anti_aliasing/quality/msaa_3d=1
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=1
